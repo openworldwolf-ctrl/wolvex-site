@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Post a clip to TikTok — Wolvex</title>
+<style>
+  body { background:#0b0e1a; color:#e8eaf6; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin:0; padding:2rem 1rem; line-height:1.6; }
+  main { max-width:640px; margin:0 auto; }
+  h1 { font-size:2.2rem; letter-spacing:.06em; margin:0 0 .25rem; text-align:center; background:linear-gradient(90deg,#ff2e63,#a855f7,#22d3ee); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .sub { text-align:center; color:#ff6b35; font-weight:700; letter-spacing:.2em; margin:0 0 1.5rem; }
+  .card { border:1px solid #2a2f4a; border-radius:12px; padding:1.25rem 1.5rem; margin:1rem 0; background:#12162a; }
+  .card.err { border-color:#ef4444; }
+  .card.ok { border-color:#22c55e; }
+  .card h2 { margin-top:0; }
+  .err h2 { color:#f87171; }
+  .ok h2 { color:#4ade80; }
+  label { display:block; font-weight:600; margin:1rem 0 .35rem; }
+  input[type=file], textarea, select { width:100%; box-sizing:border-box; background:#0b0e1a; color:#e8eaf6; border:1px solid #2a2f4a; border-radius:8px; padding:.6rem; font:inherit; }
+  textarea { min-height:90px; resize:vertical; }
+  .counter { font-size:.85rem; color:#8a90b8; text-align:right; }
+  .counter.over { color:#f87171; }
+  .btn { display:inline-block; border:1px solid #a855f7; border-radius:999px; padding:.6rem 1.5rem; font-weight:700; color:#fff; background:#a855f7; cursor:pointer; font:inherit; margin-top:1rem; }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn.ghost { background:transparent; color:#22d3ee; border-color:#22d3ee; text-decoration:none; }
+  a { color:#22d3ee; }
+  p { color:#c5cae9; }
+  .fine { font-size:.85rem; color:#8a90b8; }
+  code { background:#0b0e1a; border:1px solid #2a2f4a; border-radius:6px; padding:.1rem .4rem; word-break:break-all; }
+  pre { background:#0b0e1a; border:1px solid #2a2f4a; border-radius:8px; padding:.75rem; overflow-x:auto; white-space:pre-wrap; word-break:break-all; font-size:.85rem; }
+  .steps { list-style:none; padding:0; }
+  .steps li { padding:.3rem 0; color:#8a90b8; }
+  .steps li.active { color:#e8eaf6; font-weight:700; }
+  .steps li.done { color:#4ade80; }
+  .steps li.failed { color:#f87171; font-weight:700; }
+  .creator { display:flex; gap:1rem; align-items:center; }
+  .creator img { width:56px; height:56px; border-radius:50%; object-fit:cover; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WOLVEX</h1>
+  <div class="sub">POST A CLIP TO TIKTOK</div>
+
+  <div id="not-connected" class="card err hidden">
+    <h2>Not connected to TikTok</h2>
+    <p>This page needs a TikTok authorisation code. Log in with TikTok first — the code is single-use, so if you already used it, log in again.</p>
+    <a class="btn" href="/wolvex-site/">Login with TikTok</a>
+  </div>
+
+  <div id="server-down" class="card err hidden">
+    <h2>Publisher not running</h2>
+    <p>The upload form talks to the Wolvex publisher on this computer (<code>http://localhost:8000</code>), which holds the TikTok client secret and does the actual upload. It is not running right now.</p>
+    <p>Start it in a terminal (from the <code>wolvex-site</code> folder), with the client secret as an environment variable — never type the secret into this page:</p>
+    <pre id="serve-cmd">TIKTOK_CLIENT_SECRET=&lt;secret-from-the-TikTok-dashboard&gt; python3 tools/tiktok_post.py --serve</pre>
+    <p>Then reload this page. Command-line alternative (no server needed):</p>
+    <pre id="cli-cmd">TIKTOK_CLIENT_SECRET=&lt;secret&gt; python3 tools/tiktok_post.py --code &lt;code&gt; --video &lt;file.mp4&gt; --caption "Your caption" --app sandbox</pre>
+    <p id="server-error" class="fine"></p>
+    <p><button class="btn ghost" id="retry-btn" type="button">Retry connection</button></p>
+  </div>
+
+  <div id="connected" class="hidden">
+    <div class="card ok">
+      <h2>Connected ✓</h2>
+      <div class="creator" id="creator-box">
+        <div>
+          <div id="creator-name">TikTok account</div>
+          <div class="fine" id="creator-meta"></div>
+        </div>
+      </div>
+      <p class="fine" id="app-note"></p>
+    </div>
+
+    <form id="upload-form" class="card">
+      <label for="video-file">Video file</label>
+      <input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required>
+      <p class="fine" id="video-meta">MP4 (recommended), MOV or WebM. Up to 10 minutes and 4 GB via the API. Your clip's own limit is shown after you pick a file.</p>
+
+      <label for="caption">Caption</label>
+      <textarea id="caption" maxlength="2200" placeholder="Write the caption — hashtags and @mentions are matched by TikTok."></textarea>
+      <div class="counter" id="caption-counter">0 / 2200</div>
+
+      <label for="privacy">Who can watch it</label>
+      <select id="privacy"></select>
+      <p class="fine">Unaudited apps can only post as private (SELF_ONLY) — that is expected until TikTok audits the app.</p>
+
+      <button class="btn" id="post-btn" type="submit">Post to TikTok</button>
+    </form>
+
+    <div id="progress" class="card hidden">
+      <h2>Posting…</h2>
+      <ul class="steps" id="steps"></ul>
+    </div>
+
+    <div id="result" class="card hidden"></div>
+  </div>
+
+  <p class="fine">Your video is sent from this computer to TikTok only. The publisher runs on localhost:8000 — nothing is uploaded to any other server, and the client secret never leaves this computer.</p>
+  <p class="fine"><a href="/wolvex-site/">← Back to Wolvex home</a></p>
+</main>
+<script>
+(function () {
+  var SERVER = 'http://localhost:8000';
+  var PRIVACY_LABELS = {
+    SELF_ONLY: 'Only me (private)',
+    PUBLIC_TO_EVERYONE: 'Everyone (public)',
+    MUTUAL_FOLLOW_FRIENDS: 'Friends (mutual follows)',
+    FOLLOWER_OF_CREATOR: 'Followers'
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var sessionId = null, creator = null, app = 'sandbox', maxDuration = null, jobTimer = null;
+
+  function show(id) { $(id).classList.remove('hidden'); }
+  function hide(id) { $(id).classList.add('hidden'); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function serverDown(msg) {
+    hide('connected'); hide('not-connected'); show('server-down');
+    $('server-error').textContent = msg ? ('Last error: ' + msg) : '';
+  }
+
+  async function startSession() {
+    var code = null;
+    try {
+      code = sessionStorage.getItem('wolvex_tiktok_code');
+      app = sessionStorage.getItem('wolvex_tiktok_app') || 'sandbox';
+    } catch (e) { /* storage unavailable */ }
+    if (!code) { hide('connected'); hide('server-down'); show('not-connected'); return; }
+    try {
+      var res = await fetch(SERVER + '/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code, app: app })
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        if (data && data.code === 'code_spent') {
+          hide('connected'); hide('server-down'); show('not-connected');
+          return;
+        }
+        throw new Error((data && data.error) || ('HTTP ' + res.status));
+      }
+      sessionId = data.session;
+      creator = data.creator || {};
+      try { sessionStorage.removeItem('wolvex_tiktok_code'); } catch (e) {}
+      var name = creator.creator_nickname || creator.creator_username || 'TikTok account';
+      var handle = creator.creator_username ? '@' + creator.creator_username : '';
+      $('creator-name').textContent = name + (handle ? ' (' + handle + ')' : '');
+      if (creator.creator_avatar_url) {
+        var img = document.createElement('img');
+        img.src = creator.creator_avatar_url;
+        img.alt = '';
+        $('creator-box').insertBefore(img, $('creator-box').firstChild);
+      }
+      maxDuration = creator.max_video_post_duration_sec || null;
+      var meta = [];
+      if (maxDuration) meta.push('max video length: ' + maxDuration + 's');
+      $('creator-meta').textContent = meta.join(' · ');
+      var options = creator.privacy_level_options || ['SELF_ONLY'];
+      var sel = $('privacy');
+      sel.innerHTML = '';
+      options.forEach(function (opt) {
+        var o = document.createElement('option');
+        o.value = opt;
+        o.textContent = PRIVACY_LABELS[opt] || opt;
+        if (opt === 'SELF_ONLY') o.selected = true;
+        sel.appendChild(o);
+      });
+      $('app-note').textContent = 'App: ' + (app === 'production' ? 'Production “Wolvex”' : 'Sandbox “Wolvex Sandbox”')
+        + ' · posts from unaudited apps are private (SELF_ONLY) until TikTok audits the app.';
+      hide('not-connected'); hide('server-down'); show('connected');
+    } catch (e) {
+      serverDown(e && e.message ? e.message : 'Could not reach the publisher.');
+    }
+  }
+
+  $('retry-btn').addEventListener('click', startSession);
+
+  $('caption').addEventListener('input', function () {
+    var n = $('caption').value.length;
+    var c = $('caption-counter');
+    c.textContent = n + ' / 2200';
+    c.classList.toggle('over', n > 2200);
+  });
+
+  $('video-file').addEventListener('change', function () {
+    var f = $('video-file').files[0];
+    if (!f) return;
+    var ok = /\.(mp4|mov|webm)$/i.test(f.name) || /^video\/(mp4|quicktime|webm)$/.test(f.type || '');
+    var meta = 'Picked: ' + f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB). ';
+    if (!ok) { $('video-meta').textContent = meta + 'This does not look like an MP4, MOV or WebM file — TikTok will reject it.'; return; }
+    if (f.size > 4 * 1073741824) { $('video-meta').textContent = meta + 'Too big: the API limit is 4 GB.'; return; }
+    var v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = function () {
+      var d = v.duration;
+      URL.revokeObjectURL(v.src);
+      if (isFinite(d)) {
+        meta += 'Duration: ' + d.toFixed(1) + 's. ';
+        if (maxDuration && d > maxDuration) meta += 'Longer than this account can post (' + maxDuration + 's) — pick a shorter clip.';
+      }
+      $('video-meta').textContent = meta;
+    };
+    v.onerror = function () { $('video-meta').textContent = meta + 'Could not read the duration — the publisher will validate it.'; };
+    v.src = URL.createObjectURL(f);
+  });
+
+  var STEP_LABELS = {
+    exchanging: 'Exchanging code for access token',
+    creator_info: 'Checking creator account',
+    init: 'Starting the post on TikTok',
+    uploading: 'Uploading video to TikTok',
+    polling: 'Waiting for TikTok to finish publishing',
+    done: 'Published'
+  };
+  function renderSteps(steps) {
+    var ul = $('steps');
+    ul.innerHTML = '';
+    (steps || []).forEach(function (s) {
+      var li = document.createElement('li');
+      li.className = s.status;
+      li.textContent = (s.status === 'done' ? '✓ ' : s.status === 'failed' ? '✗ ' : s.status === 'active' ? '… ' : '· ')
+        + (STEP_LABELS[s.step] || s.step)
+        + (s.detail ? ' — ' + s.detail : '');
+      ul.appendChild(li);
+    });
+  }
+  function pollStatus(jobId) {
+    if (jobTimer) clearInterval(jobTimer);
+    jobTimer = setInterval(async function () {
+      try {
+        var res = await fetch(SERVER + '/status?job=' + encodeURIComponent(jobId));
+        var job = await res.json();
+        renderSteps(job.steps);
+        if (job.status === 'PUBLISH_COMPLETE' || job.status === 'FAILED') {
+          clearInterval(jobTimer);
+          $('post-btn').disabled = false;
+          var r = $('result');
+          if (job.status === 'PUBLISH_COMPLETE') {
+            r.className = 'card ok';
+            r.innerHTML = '<h2>Published ✓</h2>'
+              + '<p>publish_id: <code>' + esc(job.publish_id || '') + '</code></p>'
+              + '<p>The video is on the TikTok account now (private while the app is unaudited). '
+              + 'Check it at <a href="https://www.tiktok.com/@wolvex20" target="_blank" rel="noopener">tiktok.com/@wolvex20</a>.</p>';
+          } else {
+            r.className = 'card err';
+            r.innerHTML = '<h2>Publish failed</h2>'
+              + '<p>' + esc(job.error || 'Unknown error') + '</p>'
+              + (job.fail_reason ? '<p>fail_reason: <code>' + esc(job.fail_reason) + '</code></p>' : '')
+              + '<p class="fine">See the publisher terminal for the full TikTok error, then fix the cause and post again (you will need a fresh login — the code was single-use).</p>';
+          }
+          show('result');
+        }
+      } catch (e) { /* keep polling; a transient network error is not fatal */ }
+    }, 2000);
+  }
+
+  $('upload-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var file = $('video-file').files[0];
+    if (!file || !sessionId) return;
+    var caption = $('caption').value.trim();
+    if (caption.length > 2200) { alert('Caption is over 2200 characters.'); return; }
+    $('post-btn').disabled = true;
+    hide('result');
+    show('progress');
+    renderSteps([{ step: 'exchanging', status: 'active' }]);
+    try {
+      var fd = new FormData();
+      fd.append('session', sessionId);
+      fd.append('caption', caption);
+      fd.append('privacy_level', $('privacy').value);
+      fd.append('video', file, file.name);
+      var res = await fetch(SERVER + '/publish', { method: 'POST', body: fd });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error((data && data.error) || ('HTTP ' + res.status));
+      pollStatus(data.job);
+    } catch (err) {
+      renderSteps([{ step: 'init', status: 'failed', detail: err.message }]);
+      $('post-btn').disabled = false;
+    }
+  });
+
+  startSession();
+})();
+</script>
+</body>
+</html>

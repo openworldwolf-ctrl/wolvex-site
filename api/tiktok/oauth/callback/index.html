@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connected to TikTok — Wolvex</title>
+<style>
+  body { background:#0b0e1a; color:#e8eaf6; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin:0; padding:2rem 1rem; line-height:1.6; }
+  main { max-width:640px; margin:0 auto; text-align:center; }
+  h1 { font-size:2.2rem; letter-spacing:.06em; margin:0 0 1rem; background:linear-gradient(90deg,#ff2e63,#a855f7,#22d3ee); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .card { border:1px solid #2a2f4a; border-radius:12px; padding:1.5rem; margin:1.5rem 0; text-align:left; background:#12162a; }
+  .card.ok { border-color:#22c55e; }
+  .card.err { border-color:#ef4444; }
+  .card.warn { border-color:#f59e0b; }
+  .card h2 { margin-top:0; }
+  .ok h2 { color:#4ade80; }
+  .err h2 { color:#f87171; }
+  .warn h2 { color:#fbbf24; }
+  code { background:#0b0e1a; border:1px solid #2a2f4a; border-radius:6px; padding:.1rem .4rem; word-break:break-all; }
+  .btn { display:inline-block; border:1px solid #a855f7; border-radius:999px; padding:.6rem 1.5rem; text-decoration:none; font-weight:700; color:#fff; background:#a855f7; margin-top:.5rem; }
+  .btn.ghost { background:transparent; color:#22d3ee; border-color:#22d3ee; }
+  a { color:#22d3ee; }
+  p { color:#c5cae9; }
+  .fine { font-size:.85rem; color:#8a90b8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WOLVEX</h1>
+  <div id="content"><p>Checking the TikTok response…</p></div>
+  <p class="fine"><a href="/wolvex-site/">← Back to Wolvex home</a></p>
+</main>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var code = params.get('code');
+  var state = params.get('state');
+  var scopes = params.get('scopes');
+  var err = params.get('error');
+  var errDesc = params.get('error_description');
+  var savedState = null, app = 'sandbox';
+  try {
+    savedState = sessionStorage.getItem('wolvex_tiktok_state');
+    app = sessionStorage.getItem('wolvex_tiktok_app') || 'sandbox';
+  } catch (e) { /* storage unavailable; continue with defaults */ }
+  var el = document.getElementById('content');
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function mask(s) {
+    if (!s) return '';
+    if (s.length <= 12) return s.slice(0, 3) + '…' + s.slice(-3);
+    return s.slice(0, 6) + '…' + s.slice(-4);
+  }
+  if (err) {
+    el.innerHTML = '<div class="card err"><h2>Authorisation failed</h2>'
+      + '<p>TikTok returned an error: <code>' + esc(err) + '</code></p>'
+      + (errDesc ? '<p>' + esc(errDesc) + '</p>' : '')
+      + '<p>Nothing was connected. Go back and try again.</p>'
+      + '<a class="btn" href="/wolvex-site/">Try again</a></div>';
+    return;
+  }
+  if (!code) {
+    el.innerHTML = '<div class="card warn"><h2>No authorisation code</h2>'
+      + '<p>TikTok redirected here without a code. This can happen if the login was cancelled, or if the redirect lost its query string.</p>'
+      + '<p><a class="btn" href="/wolvex-site/">Back to Wolvex home</a></p></div>';
+    return;
+  }
+  if (savedState && state && state !== savedState) {
+    el.innerHTML = '<div class="card err"><h2>State mismatch</h2>'
+      + '<p>The state value TikTok returned does not match the one this browser sent. For safety, this login was rejected. Please start again from the Wolvex home page.</p>'
+      + '<a class="btn" href="/wolvex-site/">Start again</a></div>';
+    return;
+  }
+  try {
+    sessionStorage.setItem('wolvex_tiktok_code', code);
+    sessionStorage.setItem('wolvex_tiktok_app', app);
+  } catch (e) { /* storage unavailable; the upload page will ask to log in again */ }
+  var appLabel = app === 'production' ? 'Production app “Wolvex”' : 'Sandbox app “Wolvex Sandbox”';
+  el.innerHTML = '<div class="card ok"><h2>Connected to TikTok ✓</h2>'
+    + '<p><strong>App:</strong> ' + esc(appLabel) + '</p>'
+    + '<p><strong>Scopes granted:</strong> ' + esc(scopes || 'user.info.basic, video.upload, video.publish') + '</p>'
+    + '<p><strong>Authorisation code:</strong> <code>' + esc(mask(code)) + '</code></p>'
+    + '<p>The code is single-use and short-lived — continue to the upload step now. The code is exchanged for an access token by the publisher running on this computer; it is never sent to any other server.</p>'
+    + '<a class="btn" href="/wolvex-site/post/">Continue to upload →</a> '
+    + '<a class="btn ghost" href="/wolvex-site/">Home</a></div>'
+    + '<p class="fine">Next: pick a video and a caption on the upload page, then the local publisher posts it to @wolvex20 through TikTok’s Content Posting API (Direct Post).</p>';
+})();
+</script>
+</body>
+</html>

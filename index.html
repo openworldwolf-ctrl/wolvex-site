@@ -14,6 +14,11 @@
   .links { margin:2rem 0; display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; }
   .links a { border:1px solid #a855f7; border-radius:999px; padding:.5rem 1.25rem; text-decoration:none; font-weight:600; }
   .links a:hover { background:#a855f7; color:#fff; }
+  .app { border:1px solid #2a2f4a; border-radius:12px; padding:1.25rem 1.5rem; margin:2rem 0; background:#12162a; }
+  .app h2 { margin-top:0; }
+  .tiktok-btn { border:1px solid #fe2c55; border-radius:999px; padding:.6rem 1.5rem; font-weight:700; color:#fff; background:#fe2c55; cursor:pointer; font:inherit; }
+  .fine { font-size:.85rem; color:#8a90b8; }
+  code { background:#0b0e1a; border:1px solid #2a2f4a; border-radius:6px; padding:.1rem .4rem; }
   footer { margin-top:3rem; font-size:.85rem; color:#8a90b8; }
   footer a { color:#8a90b8; }
 </style>
@@ -28,10 +33,52 @@
     <a href="https://www.tiktok.com/@wolvex20">TikTok</a>
     <a href="https://www.instagram.com/openworldwolf">Instagram</a>
   </div>
+  <div class="app">
+    <h2>Post a clip</h2>
+    <p>Channel owner only: connect TikTok and post one of your own clips to <a href="https://www.tiktok.com/@wolvex20">@wolvex20</a> with the Wolvex publisher.</p>
+    <button id="login-tiktok" class="tiktok-btn" type="button">Login with TikTok</button>
+    <p class="fine" id="app-note"></p>
+    <p class="fine">Demo uses the TikTok Sandbox app by default. Add <code>?app=production</code> to the page URL to use the Production app. The publisher runs on your own computer — the client secret never leaves it.</p>
+    <p><a href="post/">Go to the upload page →</a></p>
+  </div>
   <footer>
     <a href="terms.html">Terms of Service</a> &middot; <a href="privacy.html">Privacy Policy</a><br>
     Contact: <a href="mailto:openworldwolf@gmail.com">openworldwolf@gmail.com</a>
   </footer>
 </main>
+<script>
+(function () {
+  // Client keys are public identifiers (NOT secrets). The client secret is
+  // never in this page — it lives only in the TikTok dashboard and is passed
+  // to the local publisher as an environment variable at run time.
+  var CLIENT_KEYS = {
+    sandbox: 'sbawfkbtmibp278567',
+    production: 'awho9r79pithl0rz'
+  };
+  var REDIRECT_URI = 'https://openworldwolf-ctrl.github.io/wolvex-site/api/tiktok/oauth/callback';
+  var SCOPES = 'user.info.basic,video.upload,video.publish';
+  var params = new URLSearchParams(location.search);
+  var app = params.get('app') === 'production' ? 'production' : 'sandbox';
+  document.getElementById('app-note').textContent =
+    'Using the ' + (app === 'production' ? 'Production app “Wolvex”' : 'Sandbox app “Wolvex Sandbox”') + '.';
+  document.getElementById('login-tiktok').addEventListener('click', function () {
+    var bytes = new Uint8Array(30);
+    window.crypto.getRandomValues(bytes);
+    var state = Array.from(bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+    try {
+      sessionStorage.setItem('wolvex_tiktok_state', state);
+      sessionStorage.setItem('wolvex_tiktok_app', app);
+    } catch (e) { /* storage unavailable; the callback page will warn about state */ }
+    var url = 'https://www.tiktok.com/v2/auth/authorize/'
+      + '?client_key=' + encodeURIComponent(CLIENT_KEYS[app])
+      + '&response_type=code'
+      + '&scope=' + encodeURIComponent(SCOPES)
+      + '&redirect_uri=' + encodeURIComponent(REDIRECT_URI)
+      + '&state=' + encodeURIComponent(state)
+      + '&disable_auto_auth=1';
+    location.href = url;
+  });
+})();
+</script>
 </body>
 </html>
